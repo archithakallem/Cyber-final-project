@@ -80,7 +80,6 @@ Current project flow is designed for:
 - URL
 - File hash
 
-> Note: Full behavior depends on how your active `scanner.py` and `routes.py` are wired in your local project.
 
 ## API Endpoints
 
@@ -98,7 +97,7 @@ GET /history/{target}
 
 ### 1. Clone the repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/archithakallem/Cyber-final-project
 cd cyberscan_project
 ```
 
