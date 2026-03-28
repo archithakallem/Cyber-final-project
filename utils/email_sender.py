@@ -74,8 +74,8 @@ def build_alert_email(target, scores, structured):
 
 
 def send_email_report(to_email, subject, html_content):
-    sender_email = os.getenv("CYBERSCAN_SMTP_SENDER", "your_email@gmail.com")
-    password = os.getenv("CYBERSCAN_SMTP_PASSWORD", "your_app_password")
+    sender_email = "archithareddykallem@gmail.com"
+    password = "tqfq wnxt qzsv eaqw"
 
     if not to_email or sender_email == "your_email@gmail.com" or password == "your_app_password":
         return False, "SMTP not configured"

@@ -1,183 +1,251 @@
-# CyberScan
+# 🔐 Cyber Risk Assessment & Threat Intelligence Platform
 
-CyberScan is a security analysis dashboard that combines a FastAPI backend with a Streamlit frontend to scan a target, enrich the result with external intelligence, calculate a risk score, store scan history, and optionally send alert emails.
+A unified cybersecurity analysis system that combines **network scanning, threat intelligence, contextual enrichment, scoring, and visualization** into a single interactive dashboard.
 
-## Features
+---
 
-- FastAPI-based scan API
-- Streamlit dashboard with Home, Summary, Analysis, Visuals, History, Recommendations, Risk Map, and System Info pages
-- Nmap-based open-port discovery
-- VirusTotal enrichment for threat intelligence
-- Structured scoring for exposure, threat, context, and overall risk
-- SQLite history tracking
-- Optional email alerts when malicious detections are found or overall risk is high
+## 📘 Overview
 
-## Tech Stack
+CyberScan is designed to analyze digital targets such as:
 
-### Backend
-- FastAPI
-- Uvicorn
-- Python
-- SQLite
+- 🌐 Domain
+- 🖥️ IP Address
+- 🔗 URL
+- 🧾 File Hash
 
-### Frontend
-- Streamlit
-- Plotly
-- Pandas
+The platform integrates multiple security resources and transforms raw scan data into **structured risk insights**, making it easier to understand exposure, threats, and overall security posture.
 
-### Scanning / Intelligence
-- python-nmap
-- requests
-- VirusTotal API
+---
 
-## Project Structure
+## 🎯 Objectives
 
-```text
-cyberscan_project/
-├── app/
-│   ├── main.py
-│   ├── routes.py
-│   ├── scanner.py
-│   ├── processor.py
-│   ├── scoring.py
-│   └── database.py
-├── pages/
-│   ├── 1_Summary.py
-│   ├── 2_Analysis.py
-│   ├── 3_Visuals.py
-│   ├── 4_History.py
-│   ├── 5_Recommendations.py
-│   ├── 6_Risk_Map.py
-│   └── 7_System_Info.py
-├── utils/
-│   └── email_sender.py
-├── app.py
-├── ui_utils.py
-├── requirements.txt
-└── README.md
-```
+- Build a **centralized security analysis platform**
+- Support multiple target types with automatic detection
+- Integrate **network scanning + threat intelligence**
+- Provide **risk scoring and interpretation**
+- Enable **multi-target comparison**
+- Maintain scan history
+- Trigger **automated email alerts** for high-risk findings
 
-## How It Works
+---
 
-1. The user enters a target, backend URL, VirusTotal API key, and optional alert email in the Streamlit control center.
-2. The Streamlit UI calls the FastAPI `/scan/{target}` endpoint.
-3. The backend runs Nmap to discover open ports for network targets.
-4. The backend queries VirusTotal to enrich the target with threat intelligence.
-5. The processor normalizes the raw output into a structured format.
-6. The scoring layer calculates:
-   - Exposure score
-   - Threat score
-   - Context score
-   - Overall risk score
-7. The result is saved into SQLite for history tracking.
-8. If the result qualifies for alerting, an email report can be sent automatically.
+## ⚙️ Tech Stack
 
-## Supported Targets
+### 🔹 Backend
+- **FastAPI** → API layer for scanning & processing  
+- **Python** → core logic implementation  
+- **Uvicorn** → ASGI server  
 
-Current project flow is designed for:
+### 🔹 Frontend
+- **Streamlit** → interactive dashboard UI  
+- **Plotly** → advanced interactive charts  
+- **Pandas** → data processing  
+
+### 🔹 Database
+- **SQLite** → stores scan history  
+
+### 🔹 Security Tools & APIs
+- **Nmap (python-nmap)** → network scanning (open ports)  
+- **VirusTotal API** → threat intelligence  
+- **WHOIS** → ownership and domain context  
+- **SSL Validation** → secure communication check  
+
+---
+
+## 🧠 System Architecture
+User Input (UI)
+↓
+Streamlit Frontend
+↓
+FastAPI Backend
+↓
+Scanner Modules
+(Nmap + VirusTotal + WHOIS + SSL)
+↓
+Data Processing Layer
+↓
+Scoring Engine
+↓
+SQLite Database
+↓
+Visualization + Alerts
+
+
+---
+
+## 🔍 Core Features
+
+### 🔹 1. Multi-Target Scanning
+- Accepts **comma-separated targets**
+- Example:
+scanme.nmap.org, example.com, 8.8.8.8
+- Each target is scanned independently
+- Results are compared in dashboards
+
+---
+
+### 🔹 2. Target Type Detection
+
+Automatically detects:
 - Domain
-- IP address
+- IP
 - URL
-- File hash
+- File Hash
 
-> Note: Full behavior depends on how your active `scanner.py` and `routes.py` are wired in your local project.
+Ensures correct scanning strategy for each type.
 
-## API Endpoints
+---
 
-### Run a scan
-```http
-GET /scan/{target}?api_key=YOUR_VT_KEY&email=optional@example.com
-```
+### 🔹 3. Scanner Module
 
-### Get target history
-```http
-GET /history/{target}
-```
+#### 🌐 Nmap
+- Detects open ports
+- Measures exposure
 
-## Installation
+#### 🛡 VirusTotal
+- Detects malicious signals
+- Provides threat intelligence
 
-### 1. Clone the repository
+#### 🧾 WHOIS
+- Provides ownership & registration info
+
+#### 🔐 SSL Check
+- Validates secure connection
+
+---
+
+### 🔹 4. Scoring Engine
+
+CyberScan converts raw data into meaningful scores:
+
+- **Exposure Score** → based on open ports  
+- **Threat Score** → based on malicious detections  
+- **Context Score** → based on configuration  
+- **Risk Score** → final combined score  
+
+---
+
+### 🔹 5. Interactive Dashboards
+
+| Page | Description |
+|------|------------|
+| Summary | Overall metrics & quick report |
+| Analysis | Detailed findings |
+| Visuals | Charts & comparisons |
+| History | Past scans & trends |
+| Recommendations | Actionable insights |
+| Risk Map | Severity visualization |
+| System Info | Architecture & working |
+
+---
+
+### 🔹 6. Visualizations
+
+- 📊 Bar charts  
+- 🥧 Pie charts  
+- 🍩 Donut charts  
+- 📈 Line charts  
+- 🔥 Heatmaps  
+- 🌐 Sunburst charts  
+- 🎯 Scatter/bubble charts  
+
+---
+
+### 🔹 7. Multi-Target Comparison
+
+- Compare:
+- Risk
+- Exposure
+- Threat
+- Open ports
+- Identify highest-risk target instantly
+
+---
+
+### 🔹 8. History Tracking
+
+- Stored in SQLite
+- Tracks:
+- Target
+- Timestamp
+- Scores
+- Enables trend analysis
+
+---
+
+### 🔹 9. Email Alert System
+
+Triggered when:
+- Malicious detections > 0  
+- OR Risk score > 70  
+
+📧 Sends:
+- Target
+- Risk score
+- Findings
+
+⚠️ Note: Email delivery depends on SMTP configuration.
+
+---
+
+## 🔄 Workflow
+
+1. User inputs target
+2. System detects target type
+3. Scanner modules run
+4. Data is processed
+5. Scores are calculated
+6. Data stored in database
+7. Dashboards display results
+8. Email alert triggered (if required)
+
+---
+
+## 🚀 Installation & Setup
+
+### 1. Clone Repository
 ```bash
-git clone https://github.com/archithakallem/Cyber-final-project
-cd cyberscan_project
-```
+git clone https://github.com/archithakallem/Cyber-final-project.git
+cd Cyber-final-project
 
-### 2. Create and activate virtual environment
-#### Windows
-```bash
+2. Create Virtual Environment
 python -m venv venv
 venv\Scripts\activate
-```
 
-#### macOS / Linux
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-```bash
+3. Install Dependencies
 pip install -r requirements.txt
-```
+4. Install Nmap
 
-### 4. Install Nmap on your machine
-CyberScan uses the Nmap binary through `python-nmap`, so Nmap must also be installed and available in your system path.
+Download and install from:
+https://nmap.org/download.html
 
-- Windows: install Nmap from the official installer
-- macOS: `brew install nmap`
-- Ubuntu/Debian: `sudo apt install nmap`
-
-## Run the Application
-
-### Start backend
-```bash
+▶️ Run Application
+Start Backend
 uvicorn app.main:app --reload
-```
+Start Frontend
+streamlit run ui/app.py
+📊 Example Targets
+scanme.nmap.org
+example.com
+8.8.8.8
+eicar.org
+⚠️ Limitations
+Depends on external APIs (VirusTotal)
+Basic scoring model
+Limited deep vulnerability detection
+🔮 Future Enhancements
+AI-based threat analysis
+PDF report generation
+Real-time monitoring
+Advanced vulnerability scanning
+Geo-based risk mapping
+🔐 Disclaimer
 
-### Start frontend
-```bash
-streamlit run app.py
-```
+This tool is for educational purposes only.
+Do not scan systems without proper authorization.
 
-## Email Alerting
+👩‍💻 Author
 
-Email alerts are sent only when:
-- malicious detections are present, or
-- the overall risk score is greater than 70
+Kallem Architha Reddy
+Cyber Risk Assessment & Threat Intelligence Platform
 
-and an email address is provided from the UI.
-
-Configure your sender credentials in your email utility or environment before using this feature.
-
-## Database
-
-Scan history is stored in SQLite. The database includes:
-- target
-- timestamp
-- exposure
-- threat
-- context
-- risk
-
-## Example Targets
-
-- `scanme.nmap.org`
-- `example.com`
-- `8.8.8.8`
-
-## Future Enhancements
-
-- WHOIS enrichment
-- SSL/TLS validation
-- Better target normalization
-- File upload analysis
-- PDF/HTML export reports
-- Stronger scoring model
-
-## Disclaimer
-
-Use CyberScan only on systems, domains, IPs, or assets that you own or are explicitly authorized to test.
-
-## License
-
-Add your preferred license here.

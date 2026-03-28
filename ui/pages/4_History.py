@@ -3,22 +3,38 @@ import plotly.express as px
 import requests
 import streamlit as st
 
-from ui_utils import PLOTLY_CONFIG, init_state, inject_global_styles, render_logo_header, render_sidebar, safe_round
+from ui_utils import (
+    PLOTLY_CONFIG,
+    init_state,
+    inject_global_styles,
+    render_logo_header,
+    render_sidebar,
+    safe_round,
+)
 
 st.set_page_config(page_title="CyberScan · History", page_icon="📅", layout="wide")
 init_state()
 inject_global_styles()
 render_sidebar("📅 History")
-render_logo_header("History & Comparison", "Review saved scans from the backend database and explore how the score set changes over time.", compact=True)
+render_logo_header(
+    "History & Comparison",
+    "Review saved scans from the backend database, compare previous runs, and explain how the score story changes over time.",
+    compact=True,
+)
 
 target = st.session_state.get("target")
 backend_url = st.session_state.get("backend_url", "http://127.0.0.1:8000").rstrip("/")
+
 if not target:
     st.warning("Set the target in the left Control Center first.")
     st.stop()
 
+# handle multi-target input too
+raw_targets = [t.strip() for t in target.split(",") if t.strip()]
+selected_target = st.selectbox("Choose target for history view", raw_targets, index=0)
+
 try:
-    response = requests.get(f"{backend_url}/history/{target}", timeout=30)
+    response = requests.get(f"{backend_url}/history/{selected_target}", timeout=30)
     response.raise_for_status()
     history_payload = response.json().get("history", [])
 except requests.RequestException as exc:
@@ -30,6 +46,7 @@ if not history_payload:
     st.stop()
 
 st.session_state.history_backend = history_payload
+
 rows = []
 for idx, entry in enumerate(history_payload, start=1):
     rows.append(
@@ -44,32 +61,118 @@ for idx, entry in enumerate(history_payload, start=1):
     )
 
 df = pd.DataFrame(rows)
+
+st.markdown("### Saved history table")
 st.dataframe(df, use_container_width=True, hide_index=True)
+
 st.markdown(
-    "<div class='cs-soft-card'><b>How history is saved</b><br>Each scan is written by the backend into the SQLite database with target, timestamp, exposure, threat, context, and risk. This page reads that saved history back through the backend history endpoint.</div>",
+    f"""
+    <div class='cs-soft-card'>
+    <b>How history works</b><br>
+    Every completed scan for <b>{selected_target}</b> is written by the backend into the SQLite database with timestamp, exposure, threat, context, and risk.
+    This page reads those stored records through the history endpoint and turns them into comparison visuals.
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
 metric = st.selectbox("Metric to explore", ["Exposure", "Threat", "Context", "Risk"], index=3)
-trend_fig = px.line(df, x="Run", y=metric, markers=True, hover_data=["Timestamp"], title=f"{metric} movement over time")
+
+trend_fig = px.line(
+    df,
+    x="Run",
+    y=metric,
+    markers=True,
+    hover_data=["Timestamp"],
+    title=f"{metric} movement over time",
+)
 trend_fig.update_layout(height=390, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(trend_fig, use_container_width=True, config=PLOTLY_CONFIG)
+st.caption("This chart shows how the selected metric changes from one saved run to the next.")
 
-multi_fig = px.line(df, x="Run", y=["Exposure", "Threat", "Context", "Risk"], markers=True, hover_data=["Timestamp"], title="Full historical comparison")
+multi_fig = px.line(
+    df,
+    x="Run",
+    y=["Exposure", "Threat", "Context", "Risk"],
+    markers=True,
+    hover_data=["Timestamp"],
+    title="Full historical comparison",
+)
 multi_fig.update_layout(height=430, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(multi_fig, use_container_width=True, config=PLOTLY_CONFIG)
+st.caption("This view compares all four score dimensions across the saved history of the selected target.")
+
+heatmap_df = df.set_index("Run")[["Exposure", "Threat", "Context", "Risk"]]
+heatmap_fig = px.imshow(
+    heatmap_df,
+    text_auto=True,
+    aspect="auto",
+    title="Historical score heatmap",
+)
+heatmap_fig.update_layout(height=340, margin=dict(l=20, r=20, t=55, b=20))
+st.plotly_chart(heatmap_fig, use_container_width=True, config=PLOTLY_CONFIG)
+st.caption("The heatmap makes it easier to spot which runs were stronger or weaker in each score dimension.")
 
 if len(df) >= 2:
     latest = df.iloc[-1]
     previous = df.iloc[-2]
+
     comp_df = pd.DataFrame(
         {
             "Metric": ["Exposure", "Threat", "Context", "Risk"] * 2,
-            "Score": [latest["Exposure"], latest["Threat"], latest["Context"], latest["Risk"], previous["Exposure"], previous["Threat"], previous["Context"], previous["Risk"]],
+            "Score": [
+                latest["Exposure"], latest["Threat"], latest["Context"], latest["Risk"],
+                previous["Exposure"], previous["Threat"], previous["Context"], previous["Risk"],
+            ],
             "Run Label": [f"Run {int(latest['Run'])}"] * 4 + [f"Run {int(previous['Run'])}"] * 4,
         }
     )
-    comp_fig = px.bar(comp_df, x="Metric", y="Score", color="Run Label", barmode="group", text="Score", title="Latest run vs previous run")
+
+    comp_fig = px.bar(
+        comp_df,
+        x="Metric",
+        y="Score",
+        color="Run Label",
+        barmode="group",
+        text="Score",
+        title="Latest run vs previous run",
+    )
     comp_fig.update_traces(textposition="outside")
     comp_fig.update_layout(height=410, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
     st.plotly_chart(comp_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    delta_df = pd.DataFrame(
+        {
+            "Metric": ["Exposure", "Threat", "Context", "Risk"],
+            "Delta": [
+                latest["Exposure"] - previous["Exposure"],
+                latest["Threat"] - previous["Threat"],
+                latest["Context"] - previous["Context"],
+                latest["Risk"] - previous["Risk"],
+            ],
+        }
+    )
+    delta_fig = px.bar(
+        delta_df,
+        x="Metric",
+        y="Delta",
+        text="Delta",
+        title="Change from previous run",
+    )
+    delta_fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+    delta_fig.update_layout(height=360, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(delta_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    st.markdown(
+        f"""
+        <div class='cs-soft-card'>
+        <b>Quick interpretation</b><br>
+        The latest saved run for <b>{selected_target}</b> has a risk score of <b>{safe_round(latest['Risk'])}</b>,
+        compared with <b>{safe_round(previous['Risk'])}</b> in the previous run.
+        Use the comparison and delta charts above to explain whether the latest change was driven by exposure, threat, or context.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    st.info("At least two saved runs are needed for run-to-run comparison charts.")

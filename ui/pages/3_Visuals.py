@@ -19,7 +19,7 @@ inject_global_styles()
 render_sidebar("📈 Visuals")
 render_logo_header(
     "Interactive Visuals",
-    "A cleaner chart lab with comparisons, distributions, and analysis-focused visuals.",
+    "A richer visual lab with comparison charts and analysis charts for both single-target and multi-target scans.",
     compact=True,
 )
 
@@ -28,6 +28,155 @@ if not data:
     st.warning("Run a scan from the Summary page first.")
     st.stop()
 
+# ---------------- MULTI TARGET MODE ----------------
+if data.get("is_multi_target"):
+    comp_df = pd.DataFrame(data.get("comparison", []))
+
+    if comp_df.empty:
+        st.warning("No comparison data available.")
+        st.stop()
+
+    st.info("Multi-target mode: these charts compare all scanned targets and help show which target is driving higher risk.")
+
+    # 1. Bar chart
+    fig1 = px.bar(
+        comp_df,
+        x="target",
+        y="risk",
+        color="target_type",
+        text="risk",
+        title="Overall risk by target",
+    )
+    fig1.update_traces(textposition="outside")
+    fig1.update_layout(height=420, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("This bar chart compares the overall risk score across all scanned targets.")
+
+    # 2. Line chart
+    fig2 = px.line(
+        comp_df,
+        x="target",
+        y=["exposure", "threat", "context", "risk"],
+        markers=True,
+        title="Score profile across targets",
+    )
+    fig2.update_layout(height=430, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("This line chart shows how exposure, threat, context, and risk vary from one target to another.")
+
+    # 3. Grouped chart for malicious + open ports
+    fig3 = px.bar(
+        comp_df,
+        x="target",
+        y=["malicious", "open_ports"],
+        barmode="group",
+        title="Malicious detections and open ports by target",
+    )
+    fig3.update_layout(height=400, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig3, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("This grouped chart contrasts threat intelligence and exposure indicators for each target.")
+
+    # 4. Scatter / bubble chart
+    fig4 = px.scatter(
+        comp_df,
+        x="open_ports",
+        y="risk",
+        size="malicious",
+        color="target_type",
+        hover_name="target",
+        title="Exposure vs risk vs malicious activity",
+    )
+    fig4.update_layout(height=430, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig4, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("Targets farther up and to the right are generally more concerning, especially when the bubble is larger.")
+
+    # 5. Heatmap
+    heatmap_input = comp_df.set_index("target")[["exposure", "threat", "context", "risk"]]
+    fig5 = px.imshow(
+        heatmap_input,
+        text_auto=True,
+        aspect="auto",
+        title="Multi-target score heatmap",
+    )
+    fig5.update_layout(height=380, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig5, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("The heatmap makes it easier to spot which target is highest in each scoring dimension.")
+
+    # 6. Pie chart
+    pie_df = pd.DataFrame(
+        {
+            "Target": comp_df["target"],
+            "Risk": comp_df["risk"],
+        }
+    )
+    fig6 = px.pie(
+        pie_df,
+        names="Target",
+        values="Risk",
+        title="Risk contribution share across targets",
+    )
+    fig6.update_layout(height=420, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig6, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("This pie chart shows how much each target contributes to the total combined risk picture.")
+
+    # 7. Donut chart
+    fig7 = px.pie(
+        pie_df,
+        names="Target",
+        values="Risk",
+        title="Risk share donut view",
+        hole=0.45,
+    )
+    fig7.update_layout(height=420, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig7, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("The donut chart gives the same comparison in a compact circular form.")
+
+    # 8. Sunburst
+    sunburst_df = pd.DataFrame(
+        {
+            "labels": (
+                ["All Targets"]
+                + comp_df["target"].tolist()
+                + [f"{row['target']} · Risk" for _, row in comp_df.iterrows()]
+            ),
+            "parents": (
+                [""]
+                + ["All Targets"] * len(comp_df)
+                + comp_df["target"].tolist()
+            ),
+            "values": (
+                [max(comp_df["risk"].sum(), 1)]
+                + comp_df["risk"].tolist()
+                + comp_df["risk"].tolist()
+            ),
+        }
+    )
+    fig8 = px.sunburst(
+        sunburst_df,
+        names="labels",
+        parents="parents",
+        values="values",
+        title="Sunburst comparison across targets",
+    )
+    fig8.update_layout(height=430, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(fig8, use_container_width=True, config=PLOTLY_CONFIG)
+    st.caption("The sunburst view shows the overall multi-target picture and how each target contributes to it.")
+
+    st.markdown("### Quick analyst interpretation")
+    highest = comp_df.sort_values("risk", ascending=False).iloc[0]
+    st.markdown(
+        f"""
+        <div class='cs-soft-card'>
+        The most critical target in this run is <b>{highest['target']}</b>, with a risk score of <b>{safe_round(highest['risk'])}</b>.
+        Use the charts above to explain whether that result is being driven more by open-port exposure, malicious detections, or both.
+        This mode is useful for demonstrating comparison, prioritization, and relative security posture across multiple targets.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+# ---------------- SINGLE TARGET MODE ----------------
 scores = data.get("scores", {})
 structured = data.get("data", {})
 ports = structured.get("open_ports", []) or []
@@ -41,96 +190,44 @@ current_scores = {
 risk_label, risk_icon = get_risk_label(current_scores["Risk"])
 st.info(f"{risk_icon} Current interpretation: {risk_label}")
 
-comparison_mode = st.selectbox(
-    "Comparison source",
-    ["Recommended baseline", "Reduced-exposure target", "Previous scan"]
-)
-if comparison_mode == "Previous scan" and isinstance(st.session_state.get("history_backend"), list) and len(st.session_state["history_backend"]) >= 2:
-    prev = st.session_state["history_backend"][-2]
-    compare_scores = {
-        "Exposure": safe_round(prev.get("exposure", 0)),
-        "Threat": safe_round(prev.get("threat", 0)),
-        "Context": safe_round(prev.get("context", 0)),
-        "Risk": safe_round(prev.get("risk", 0)),
-    }
-    compare_label = "Previous scan"
-elif comparison_mode == "Reduced-exposure target":
-    compare_scores = {"Exposure": 10, "Threat": 5, "Context": 72, "Risk": 29}
-    compare_label = "Reduced-exposure target"
-else:
-    compare_scores = {"Exposure": 20, "Threat": 10, "Context": 85, "Risk": 25}
-    compare_label = "Recommended baseline"
-
-st.markdown(
-    f"<div class='cs-soft-card'><b>What the comparison means</b><br>The selected reference is <b>{compare_label}</b>. Comparison charts use that same reference, while the analysis charts below focus only on the current scan output.</div>",
-    unsafe_allow_html=True,
+score_df = pd.DataFrame(
+    {"Metric": list(current_scores.keys()), "Score": list(current_scores.values())}
 )
 
-comparison_df = pd.DataFrame(
-    {
-        "Metric": list(current_scores.keys()) * 2,
-        "Score": list(current_scores.values()) + list(compare_scores.values()),
-        "Series": ["Current scan"] * 4 + [compare_label] * 4,
-    }
-)
-
-fig = px.bar(comparison_df, x="Metric", y="Score", color="Series", barmode="group", text="Score", title="Comparison chart")
+# Bar chart
+fig = px.bar(score_df, x="Metric", y="Score", text="Score", title="Current score overview")
 fig.update_traces(textposition="outside")
-fig.update_layout(height=430, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+fig.update_layout(height=420, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("This grouped chart shows where the current scan stands relative to the selected reference.")
 
-radar = go.Figure()
-radar.add_trace(
-    go.Scatterpolar(
-        r=list(current_scores.values()) + [current_scores["Exposure"]],
-        theta=["Exposure", "Threat", "Context", "Risk", "Exposure"],
-        fill="toself",
-        name="Current scan",
-    )
-)
-radar.add_trace(
-    go.Scatterpolar(
-        r=list(compare_scores.values()) + [compare_scores["Exposure"]],
-        theta=["Exposure", "Threat", "Context", "Risk", "Exposure"],
-        fill="toself",
-        name=compare_label,
-        opacity=0.45,
-    )
-)
-radar.update_layout(
-    title="Radar comparison",
-    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-    height=430,
-    margin=dict(l=20, r=20, t=55, b=20),
-)
-st.plotly_chart(radar, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("The radar chart helps show shape differences between the current scan and the selected comparison reference.")
-
-delta_df = pd.DataFrame(
-    {
-        "Metric": list(current_scores.keys()),
-        "Delta": [current_scores[k] - compare_scores[k] for k in current_scores.keys()],
-    }
-)
-delta_fig = px.bar(delta_df, x="Metric", y="Delta", text="Delta", title="Delta versus comparison")
-delta_fig.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-delta_fig.update_layout(height=360, margin=dict(l=20, r=20, t=55, b=20))
-st.plotly_chart(delta_fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("Positive values mean the current scan is higher than the selected reference. Negative values mean it is lower.")
-
-st.markdown("### Current-scan analysis charts")
-
+# Pie chart
 pie_fig = px.pie(
     values=[current_scores["Exposure"], current_scores["Threat"], current_scores["Context"]],
     names=["Exposure", "Threat", "Context"],
-    title="Current score contribution distribution",
-    hole=0.45,
+    title="Contribution distribution",
 )
 pie_fig.update_layout(height=390, margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(pie_fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("This donut chart shows which main security dimension contributes more heavily to the current scan picture.")
 
+# Donut chart
+donut_fig = px.pie(
+    values=[current_scores["Exposure"], current_scores["Threat"], current_scores["Context"]],
+    names=["Exposure", "Threat", "Context"],
+    title="Contribution donut view",
+    hole=0.45,
+)
+donut_fig.update_layout(height=390, margin=dict(l=20, r=20, t=55, b=20))
+st.plotly_chart(donut_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+# Line chart
+line_df = pd.DataFrame(
+    {"Metric": list(current_scores.keys()), "Score": list(current_scores.values())}
+)
+line_fig = px.line(line_df, x="Metric", y="Score", markers=True, title="Metric line view")
+line_fig.update_layout(height=340, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+st.plotly_chart(line_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+# Sunburst
 sunburst_df = pd.DataFrame(
     {
         "labels": ["Risk", "Exposure", "Threat", "Context"],
@@ -146,33 +243,40 @@ sunburst_df = pd.DataFrame(
 sunburst_fig = px.sunburst(sunburst_df, names="labels", parents="parents", values="values", title="Sunburst risk composition")
 sunburst_fig.update_layout(height=400, margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(sunburst_fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("The sunburst chart starts from the overall risk story and breaks it into the main score drivers.")
 
-heatmap_df = pd.DataFrame([list(current_scores.values())], columns=list(current_scores.keys()), index=["Current scan"])
-heatmap_fig = px.imshow(heatmap_df, text_auto=True, aspect="auto", title="Current-scan heatmap")
+# Radar
+radar = go.Figure()
+radar.add_trace(
+    go.Scatterpolar(
+        r=list(current_scores.values()) + [current_scores["Exposure"]],
+        theta=["Exposure", "Threat", "Context", "Risk", "Exposure"],
+        fill="toself",
+        name="Current scan",
+    )
+)
+radar.update_layout(
+    title="Radar view",
+    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+    height=430,
+    margin=dict(l=20, r=20, t=55, b=20),
+)
+st.plotly_chart(radar, use_container_width=True, config=PLOTLY_CONFIG)
+
+# Heatmap
+heatmap_input = pd.DataFrame([current_scores], index=["Current scan"])
+heatmap_fig = px.imshow(
+    heatmap_input,
+    text_auto=True,
+    aspect="auto",
+    title="Current scan heatmap",
+)
 heatmap_fig.update_layout(height=260, margin=dict(l=20, r=20, t=55, b=20))
 st.plotly_chart(heatmap_fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("The heatmap turns the current score set into an intensity view for a quick visual read.")
 
-vt_df = pd.DataFrame(
-    {
-        "Category": ["Malicious", "Other observations"],
-        "Count": [
-            structured.get("vt_malicious", 0),
-            max(structured.get("vt_total", 0) - structured.get("vt_malicious", 0), 0),
-        ],
-    }
-)
-vt_fig = px.bar(vt_df, x="Category", y="Count", text="Count", title="Threat intelligence observation split")
-vt_fig.update_traces(textposition="outside")
-vt_fig.update_layout(height=360, margin=dict(l=20, r=20, t=55, b=20))
-st.plotly_chart(vt_fig, use_container_width=True, config=PLOTLY_CONFIG)
-st.caption("This chart isolates malicious observations from the rest of the VirusTotal result set.")
-
+# Port distribution
 if ports:
     port_df = pd.DataFrame(ports)
     if "port" in port_df.columns:
         port_hist = px.histogram(port_df, x="port", title="Open port distribution")
         port_hist.update_layout(height=360, margin=dict(l=20, r=20, t=55, b=20))
         st.plotly_chart(port_hist, use_container_width=True, config=PLOTLY_CONFIG)
-        st.caption("This distribution chart shows how the exposed open ports are spread in the current scan.")

@@ -10,15 +10,49 @@ router = APIRouter()
 
 
 def get_network_target(target: str, target_type: str) -> str:
-    """
-    Nmap should receive only a host/IP.
-    If the user gives a URL, strip protocol and path.
-    """
     if target_type == "url":
         cleaned = target.replace("https://", "").replace("http://", "")
         cleaned = cleaned.split("/")[0]
         return cleaned
     return target
+
+
+def scan_one_target(target: str, api_key: str, email: str | None = None):
+    target_type = detect_target_type(target)
+    network_target = get_network_target(target, target_type)
+
+    if target_type == "hash":
+        nmap_data = []
+    else:
+        nmap_data = run_nmap_scan(network_target)
+
+    vt_data = run_virustotal_scan(target, api_key, target_type)
+
+    structured = process_data(nmap_data, vt_data)
+    scores = calculate_scores(structured)
+
+    save_scan(target, scores)
+
+    alert_triggered = bool(
+        structured.get("vt_malicious", 0) > 0
+        or float(scores.get("risk", 0)) > 70
+    )
+
+    email_status = "Not triggered"
+    if alert_triggered and email:
+        subject, html = build_alert_email(target, scores, structured)
+        sent, email_status = send_email_report(email, subject, html)
+        if not sent:
+            email_status = f"Alert qualified but not sent: {email_status}"
+
+    return {
+        "target": target,
+        "target_type": target_type,
+        "data": structured,
+        "scores": scores,
+        "alert_triggered": alert_triggered,
+        "email_status": email_status,
+    }
 
 
 @router.get("/scan/{target:path}")
@@ -28,41 +62,40 @@ def scan(
     email: str | None = Query(default=None)
 ):
     try:
-        target_type = detect_target_type(target)
-        network_target = get_network_target(target, target_type)
+        targets = [t.strip() for t in target.split(",") if t.strip()]
 
-        # Nmap does not apply to file hashes
-        if target_type == "hash":
-            nmap_data = []
-        else:
-            nmap_data = run_nmap_scan(network_target)
+        if not targets:
+            raise HTTPException(status_code=400, detail="No valid targets provided.")
 
-        vt_data = run_virustotal_scan(target, api_key, target_type)
+        results = [scan_one_target(t, api_key, email) for t in targets]
 
-        structured = process_data(nmap_data, vt_data)
-        scores = calculate_scores(structured)
+        # keep old behavior for single target
+        if len(results) == 1:
+            return results[0]
 
-        save_scan(target, scores)
-
-        alert_triggered = bool(
-            structured.get("vt_malicious", 0) > 0
-            or float(scores.get("risk", 0)) > 70
-        )
-
-        email_status = "Not triggered"
-        if alert_triggered and email:
-            subject, html = build_alert_email(target, scores, structured)
-            sent, email_status = send_email_report(email, subject, html)
-            if not sent:
-                email_status = f"Alert qualified but not sent: {email_status}"
+        comparison = []
+        for item in results:
+            scores = item.get("scores", {})
+            comparison.append(
+                {
+                    "target": item.get("target"),
+                    "target_type": item.get("target_type"),
+                    "exposure": scores.get("exposure", 0),
+                    "threat": scores.get("threat", 0),
+                    "context": scores.get("context", 0),
+                    "risk": scores.get("risk", 0),
+                    "malicious": item.get("data", {}).get("vt_malicious", 0),
+                    "open_ports": len(item.get("data", {}).get("open_ports", []) or []),
+                    "alert_triggered": item.get("alert_triggered", False),
+                    "email_status": item.get("email_status", "Not triggered"),
+                }
+            )
 
         return {
-            "target": target,
-            "target_type": target_type,
-            "data": structured,
-            "scores": scores,
-            "alert_triggered": alert_triggered,
-            "email_status": email_status,
+            "is_multi_target": True,
+            "target_count": len(results),
+            "results": results,
+            "comparison": comparison,
         }
 
     except Exception as e:

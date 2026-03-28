@@ -7,13 +7,119 @@ st.set_page_config(page_title="CyberScan · Recommendations", page_icon="🛡️
 init_state()
 inject_global_styles()
 render_sidebar("🛡️ Recommendations")
-render_logo_header("Smart Recommendations", "Practical actions generated from the scan and brief explanations of why each one matters.", compact=True)
+render_logo_header(
+    "Smart Recommendations",
+    "Practical actions generated from the scan, along with short explanations of why they matter and what to do next.",
+    compact=True,
+)
 
 data = st.session_state.get("scan_data")
 if not data:
     st.warning("Run a scan from the Summary page first.")
     st.stop()
 
+# ---------------- MULTI TARGET MODE ----------------
+if data.get("is_multi_target"):
+    comp_df = pd.DataFrame(data.get("comparison", []))
+
+    st.markdown("### Multi-target recommendation view")
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+    recommendations = []
+    for _, row in comp_df.iterrows():
+        target = row["target"]
+        risk = float(row.get("risk", 0) or 0)
+        malicious = int(row.get("malicious", 0) or 0)
+        ports = int(row.get("open_ports", 0) or 0)
+
+        if malicious > 0:
+            recommendations.append(
+                (
+                    "Critical",
+                    target,
+                    "Investigate threat signal",
+                    "External intelligence flagged malicious activity for this target.",
+                    "Validate the indicator immediately and review containment or blocking options.",
+                )
+            )
+
+        if ports > 5:
+            recommendations.append(
+                (
+                    "High",
+                    target,
+                    "Reduce exposed services",
+                    "A larger number of open ports increases the visible attack surface.",
+                    "Close or restrict services that are not required externally.",
+                )
+            )
+
+        if risk > 70:
+            recommendations.append(
+                (
+                    "Critical",
+                    target,
+                    "Prioritize full security review",
+                    "The overall risk score is high for this target.",
+                    "Escalate this target for immediate review and remediation planning.",
+                )
+            )
+        elif risk > 40:
+            recommendations.append(
+                (
+                    "Medium",
+                    target,
+                    "Plan remediation",
+                    "The overall result is moderate and should still be improved.",
+                    "Focus first on the factors driving exposure and threat upward.",
+                )
+            )
+
+    if not recommendations:
+        recommendations.append(
+            (
+                "Good",
+                "All scanned targets",
+                "Maintain current controls",
+                "No dominant issue was found in the current multi-target run.",
+                "Continue monitoring and keep preventive controls updated.",
+            )
+        )
+
+    rec_df = pd.DataFrame(
+        recommendations,
+        columns=["Priority", "Target", "Recommendation", "Why", "Action"],
+    )
+
+    for idx, row in rec_df.iterrows():
+        st.markdown(
+            f"""
+            <div class='cs-soft-card'>
+            <b>{idx + 1}. {row['Recommendation']}</b><br>
+            <span class='cs-mini'>Priority: {row['Priority']} | Target: {row['Target']}</span><br>
+            <b>Why:</b> {row['Why']}<br>
+            <b>Suggested action:</b> {row['Action']}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.dataframe(rec_df, use_container_width=True, hide_index=True)
+
+    st.markdown(
+        """
+        <div class='cs-soft-card'>
+        <b>How to present this page</b><br>
+        In multi-target mode, recommendations help prioritize which target should be handled first.
+        A target with malicious detections should be reviewed before one that is only moderately exposed,
+        even if both appear in the same comparison run.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+# ---------------- SINGLE TARGET MODE ----------------
 structured = data.get("data", {})
 scores = data.get("scores", {})
 recommendations = []

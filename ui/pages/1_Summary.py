@@ -23,7 +23,7 @@ inject_global_styles()
 render_sidebar("📊 Summary")
 render_logo_header(
     "Summary Dashboard",
-    "Run the scan, review the core metrics, and read a concise report of what the system found and did.",
+    "Run the scan, review the core metrics, and compare targets when multiple inputs are provided.",
     compact=True,
 )
 require_scan_inputs()
@@ -32,7 +32,7 @@ backend_url = st.session_state.backend_url.rstrip("/")
 target = st.session_state.target
 
 st.markdown(
-    f"<div class='cs-soft-card'><b>Target:</b> {target}<br><b>Email alert destination:</b> {st.session_state.email or 'Not set'}<br><b>Backend:</b> {backend_url}</div>",
+    f"<div class='cs-soft-card'><b>Target input:</b> {target}<br><b>Email alert destination:</b> {st.session_state.email or 'Not set'}<br><b>Backend:</b> {backend_url}</div>",
     unsafe_allow_html=True,
 )
 
@@ -42,7 +42,7 @@ if st.button("🚀 Run security scan", use_container_width=True, type="primary")
             res = requests.get(
                 f"{backend_url}/scan/{target}",
                 params={"api_key": st.session_state.api_key, "email": st.session_state.email},
-                timeout=90,
+                timeout=120,
             )
             res.raise_for_status()
             payload = res.json()
@@ -58,13 +58,67 @@ if not data:
     st.warning("No scan result yet. Run a scan from this page.")
     st.stop()
 
+# ---------------- MULTI TARGET MODE ----------------
+if data.get("is_multi_target"):
+    comparison = data.get("comparison", [])
+    st.markdown("### Multi-target comparison")
+
+    comp_df = pd.DataFrame(comparison)
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+    risk_fig = px.bar(
+        comp_df,
+        x="target",
+        y="risk",
+        color="target_type",
+        text="risk",
+        title="Risk comparison across targets",
+    )
+    risk_fig.update_traces(textposition="outside")
+    risk_fig.update_layout(height=430, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(risk_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    metric_fig = px.line(
+        comp_df,
+        x="target",
+        y=["exposure", "threat", "context", "risk"],
+        markers=True,
+        title="Score comparison by target",
+    )
+    metric_fig.update_layout(height=430, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(metric_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    mal_fig = px.bar(
+        comp_df,
+        x="target",
+        y=["malicious", "open_ports"],
+        barmode="group",
+        title="Malicious detections and open ports",
+    )
+    mal_fig.update_layout(height=400, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(mal_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    st.markdown("### Quick interpretation")
+    highest = comp_df.sort_values("risk", ascending=False).iloc[0]
+    st.markdown(
+        f"""
+        <div class='cs-soft-card'>
+        The highest-risk target in this run is <b>{highest['target']}</b> with a risk score of <b>{safe_round(highest['risk'])}</b>.
+        This comparison view helps you identify which target has higher exposure, stronger threat signals, or weaker context.
+        Email alerts are evaluated separately for each target using the same malicious-or-high-risk rule.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.stop()
+
+# ---------------- SINGLE TARGET MODE ----------------
 scores = data.get("scores", {})
 structured = data.get("data", {})
 ports = structured.get("open_ports", []) or []
 risk_value = float(scores.get("risk", 0) or 0)
 risk_label, risk_icon = get_risk_label(risk_value)
-
-# target type if backend returns it
 target_type = data.get("target_type", "Detected automatically")
 
 m1, m2, m3, m4 = st.columns(4)
@@ -114,54 +168,6 @@ summary_df = pd.DataFrame(
 )
 st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
-st.markdown("### Resources used for this scan")
-resources_df = pd.DataFrame(
-    {
-        "Resource": ["Nmap", "VirusTotal", "Target type detection"],
-        "Purpose": [
-            "Identifies visible open ports and exposed services for network-facing targets.",
-            "Checks external threat intelligence for domains, IPs, URLs, and file hashes.",
-            "Classifies the input as domain, IP, URL, or hash so the correct scan path is applied.",
-        ],
-    }
-)
-st.dataframe(resources_df, use_container_width=True, hide_index=True)
-
-st.markdown("### Supported target types")
-targets_df = pd.DataFrame(
-    {
-        "Target type": ["Domain", "IP address", "URL", "File hash"],
-        "How CyberScan handles it": [
-            "Uses VirusTotal domain intelligence and Nmap network scan.",
-            "Uses VirusTotal IP intelligence and Nmap network scan.",
-            "Uses VirusTotal URL submission/analysis and extracts the host for Nmap where applicable.",
-            "Uses VirusTotal file intelligence only; Nmap is skipped because hashes are not network targets.",
-        ],
-    }
-)
-st.dataframe(targets_df, use_container_width=True, hide_index=True)
-
-st.markdown("### Separate analysis charts")
-
-vt_df = pd.DataFrame(
-    {
-        "Category": ["Malicious", "Other observations"],
-        "Count": [
-            structured.get("vt_malicious", 0),
-            max(structured.get("vt_total", 0) - structured.get("vt_malicious", 0), 0),
-        ],
-    }
-)
-vt_fig = px.pie(vt_df, names="Category", values="Count", title="Threat intelligence split", hole=0.45)
-vt_fig.update_layout(height=380, margin=dict(l=20, r=20, t=55, b=20))
-st.plotly_chart(vt_fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-port_df = pd.DataFrame(ports) if ports else pd.DataFrame(columns=["port", "state"])
-if not port_df.empty and "port" in port_df.columns:
-    port_fig = px.histogram(port_df, x="port", title="Open port distribution")
-    port_fig.update_layout(height=360, margin=dict(l=20, r=20, t=55, b=20))
-    st.plotly_chart(port_fig, use_container_width=True, config=PLOTLY_CONFIG)
-
 st.markdown("### Summary report")
 for line in summarise_findings(structured, scores):
     st.markdown(f"<div class='cs-soft-card'>{line}</div>", unsafe_allow_html=True)
@@ -170,18 +176,9 @@ st.markdown("### What the system did")
 st.markdown(
     """
     <div class='cs-soft-card'>
-    CyberScan first identified the input type so the right analysis path could be used. It then ran Nmap for network-facing targets,
-    queried VirusTotal using the matching endpoint for domains, IPs, URLs, or file hashes, normalized the results into reusable fields,
-    calculated the score set, and prepared the output for deeper analysis, charting, recommendations, history, and automated alerting.
+    CyberScan identified the input type, applied the correct scan path, ran the scanning pipeline, normalized the results,
+    calculated exposure, threat, context, and risk scores, and prepared the output for analysis, visualization, history, and alerting.
     </div>
     """,
-    unsafe_allow_html=True,
-)
-
-st.markdown("### Email alert status")
-alert_triggered = data.get("alert_triggered", False)
-email_status = data.get("email_status", "Unknown")
-st.markdown(
-    f"<div class='cs-soft-card'><b>Triggered:</b> {alert_triggered}<br><b>Status:</b> {email_status}<br><b>Rule:</b> Alert is sent only when malicious detections are present or the risk score is greater than 70, and an email address is provided.</div>",
     unsafe_allow_html=True,
 )

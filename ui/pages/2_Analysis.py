@@ -16,13 +16,69 @@ st.set_page_config(page_title="CyberScan · Analysis", page_icon="🔎", layout=
 init_state()
 inject_global_styles()
 render_sidebar("🔎 Analysis")
-render_logo_header("Deep Analysis", "Review network evidence, threat signals, and short interactive explanations of what the result means.", compact=True)
+render_logo_header(
+    "Deep Analysis",
+    "Review network evidence, threat signals, and short explanations of what the result means.",
+    compact=True,
+)
 
 data = st.session_state.get("scan_data")
 if not data:
     st.warning("Run a scan from the Summary page first.")
     st.stop()
 
+# ---------------- MULTI TARGET MODE ----------------
+if data.get("is_multi_target"):
+    comp_df = pd.DataFrame(data.get("comparison", []))
+
+    st.markdown("### Multi-target analysis")
+    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+    highest_risk = comp_df.sort_values("risk", ascending=False).iloc[0]
+    highest_ports = comp_df.sort_values("open_ports", ascending=False).iloc[0]
+    highest_mal = comp_df.sort_values("malicious", ascending=False).iloc[0]
+
+    st.markdown(
+        f"""
+        <div class='cs-soft-card'>
+        <b>Highest-risk target:</b> {highest_risk['target']} with risk {safe_round(highest_risk['risk'])}.<br>
+        <b>Highest exposure:</b> {highest_ports['target']} with {int(highest_ports['open_ports'])} open port(s).<br>
+        <b>Highest malicious signal:</b> {highest_mal['target']} with {int(highest_mal['malicious'])} malicious detection(s).<br>
+        This helps identify whether the most concerning target is being driven by exposure, threat reputation, or both.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    risk_fig = px.bar(
+        comp_df,
+        x="target",
+        y="risk",
+        color="target_type",
+        text="risk",
+        title="Risk ranking across targets",
+    )
+    risk_fig.update_traces(textposition="outside")
+    risk_fig.update_layout(height=380, yaxis_range=[0, 110], margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(risk_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    exp_fig = px.bar(
+        comp_df,
+        x="target",
+        y=["open_ports", "malicious"],
+        barmode="group",
+        title="Exposure and malicious signals across targets",
+    )
+    exp_fig.update_layout(height=380, margin=dict(l=20, r=20, t=55, b=20))
+    st.plotly_chart(exp_fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    st.markdown("### Analyst summary")
+    st.info(
+        "In multi-target mode, the most important comparison is whether risk is being driven by high open-port exposure, high malicious detections, or a weaker context score. This view supports prioritization during presentation or review."
+    )
+    st.stop()
+
+# ---------------- SINGLE TARGET MODE ----------------
 scores = data.get("scores", {})
 structured = data.get("data", {})
 ports = structured.get("open_ports", []) or []
